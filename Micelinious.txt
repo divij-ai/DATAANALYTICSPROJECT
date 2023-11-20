@@ -1,0 +1,206 @@
+Micelinious
+
+
+create OR replace table UK_ACCIDENT_TEST 
+(ID number, 
+Accident_Index varchar,
+Location_Easting_OSGR number,
+Location_Northing_OSGR number,
+Longitude number,
+Latitude number,
+Police_Force number,
+Accident_Severity number,
+Number_of_Vehicles number,
+Number_of_Casualties number,
+Date_of_accident varchar,
+Day_Of_Week varchar,
+Time varchar,
+Local_Authority_District varchar,
+Local_Authority_Highway varchar,
+"1st_Road_Class" number,
+"1st_Road_Number" number,
+Road_Type varchar,
+Speed_limit number,
+Junction_Control varchar,
+"2nd_Road_Class" number,
+"2nd_Road_Number" number,
+Pedestrian_Crossing_Human_Control varchar,
+Pedestrian_Crossing_Physical_Facilities varchar,
+Light_Conditions varchar,
+Weather_Conditions varchar,
+Road_Surface_Conditions varchar,
+Special_Conditions_at_Site varchar,
+Carriageway_Hazards varchar,
+Urban_or_Rural_Area number,
+Did_Police_Officer_Attend_Scene_of_Accident varchar,
+LSOA_of_Accident_Location varchar,
+Year number) ;
+
+INSERT INTO UK_ROAD_SAFETY.RAW.UK_ACCIDENT_TEST SELECT * FROM UK_ROAD_SAFETY.RAW.UK_ACCIDENT;
+
+
+
+select count (*) from UK_ACCIDENT_TEST;
+
+/* Deleting Few Rows which have NULLs For Specified Columns */
+
+DELETE FROM raw.UK_ACCIDENT
+WHERE Location_Easting_OSGR IS NULL OR Longitude IS NULL OR Time IS NULL 
+OR Pedestrian_Crossing_Physical_Facilities IS NULL;
+
+/* Deleting Rows from table where [first_Road_Number] column contains less than 0 values*/
+
+DELETE FROM raw.UK_ACCIDENT
+where first_Road_Number<0;
+
+/* Updating 'Unknown' or NULL values to the most frequent value in 'Road_Type' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Road_Type = (
+
+	SELECT TOP (1) Road_Type FROM raw.UK_ACCIDENT
+	GROUP BY Road_Type 
+	ORDER BY COUNT(*) DESC
+
+)
+
+WHERE Road_Type = 'Unknown' OR Road_Type is NULL;
+
+/* Updating 'Unknown' or NULL values to the most frequent value in 'Weather_Conditions' column*/
+
+
+UPDATE raw.UK_ACCIDENT
+SET Weather_Conditions = (
+
+	SELECT TOP (1) WEATHER_CONDITIONS FROM raw.UK_ACCIDENT 
+	GROUP BY Weather_Conditions 
+	ORDER BY COUNT(*) DESC 
+
+)
+
+WHERE Weather_Conditions = 'Unknown' OR Weather_Conditions is NULL;
+
+/* Updating 3(Unknown) to the most frequent value 1(Urban) in 'Urban_or_Rural_Area' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Urban_or_Rural_Area = 1
+WHERE Urban_or_Rural_Area = 3 ;
+
+/* Updating NULL values to the most frequent value in 'Pedestrian_Crossing_Physical_Facilities' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Pedestrian_Crossing_Physical_Facilities = (
+
+	SELECT TOP (1) Pedestrian_Crossing_Physical_Facilities 
+	FROM raw.UK_ACCIDENT
+	GROUP BY Pedestrian_Crossing_Physical_Facilities
+	ORDER BY COUNT(*) DESC
+
+)
+WHERE Pedestrian_Crossing_Physical_Facilities IS NULL;
+
+
+
+SELECT * FROM UK_ACCIDENT_TEST WHERE Location_Easting_OSGR IS NULL OR Longitude IS NULL OR Time IS NULL 
+OR Pedestrian_Crossing_Physical_Facilities IS NULL;
+
+
+create schema base;
+create schema mart;
+
+ALTER TABLE UK_ACCIDENT RENAME TO UK_ROAD_SAFETY.BASE.UK_ACCIDENT;
+
+/* Sql Query For Creating Week days table 'Week_Day'*/
+
+CREATE TABLE mart.Week_Day(
+	Day_Id int,
+	Day VARCHAR(50)
+);
+
+SELECT Day_Of_Week, COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY Day_Of_Week;
+
+INSERT INTO mart.week_day 
+SELECT Day_Of_Week, COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY Day_Of_Week;
+
+CREATE TABLE mart.Urban_or_Rural_Area(
+  URBAN_OR_RURAL INT,
+  COUNT INT
+);
+
+SELECT URBAN_OR_RURAL_AREA, COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY URBAN_OR_RURAL_AREA
+
+
+INSERT INTO mart.URBAN_OR_RURAL_AREA 
+SELECT URBAN_OR_RURAL_AREA, COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY URBAN_OR_RURAL_AREA
+
+
+/* Sql Query For Creating Accidnet Severity table 'Acc_Severity'*/
+
+CREATE TABLE mart.Accident_Severity (
+ SEVERITY_ID INT,
+ NUMBER_OF_CASUALTIES int
+);
+
+SELECT ACCIDENT_SEVERITY, COUNT (Number_of_Casualties) FROM BASE.UK_ACCIDENT
+GROUP BY ACCIDENT_SEVERITY
+
+INSERT INTO mart.ACCIDENT_SEVERITY
+SELECT ACCIDENT_SEVERITY, COUNT (NUMBER_OF_CASUALTIES) FROM BASE.UK_ACCIDENT
+GROUP BY ACCIDENT_SEVERITY
+
+
+/*(Sql Query For Creating No. of Accidents in Year)*/
+
+CREATE TABLE mart.YEAR(
+YEAR INT,
+ID INT
+);
+
+
+SELECT YEAR AND COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY YEAR
+
+INSERT INTO mart.YEAR
+SELECT YEAR, COUNT(ID) FROM BASE.UK_ACCIDENT
+GROUP BY YEAR
+
+/* (QUERY FOR CREATING A TABLE FOR NUMBER OF ACCIDENTS PER HOUR)*/
+DROP TABLE UK_ROAD_SAFETY.MART.TIME
+
+
+CREATE TABLE mart.TIME(
+TIME VARCHAR ,
+ID INT
+);
+
+
+
+SELECT TIME AND COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY TIME
+
+
+
+INSERT INTO mart.YEAR
+SELECT YEAR, COUNT(ID) FROM BASE.UK_ACCIDENT
+GROUP BY YEAR
+
+
+/*FFGGGGGGGGGGGGGGGGGGGGGGGG*/
+
+
+CREATE TABLE mart.Speed_limit(
+Speed_limit INT,
+ID INT);
+
+SELECT Speed_limit AND COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY Speed_limit
+
+INSERT INTO mart.Speed_limit
+SELECT Speed_limit, COUNT (ID) FROM BASE.UK_ACCIDENT
+GROUP BY Speed_limit
+
+

@@ -1,0 +1,263 @@
+initialization
+
+create database UK_Road_Safety;
+create schema raw;
+
+-- csv file format used to recognize the flat files as a csv
+
+
+create file format ff_csv 
+type = csv
+field_optionally_ENCLOSED_BY = '"' 
+comment = 'raw csv file format';
+
+create stage stg_raw
+file_format = FF_CSV;
+
+
+CREATE USER MADHU2001 PASSWORD='abc123' DEFAULT_ROLE = ACCOUNTADMIN DEFAULT_SECONDARY_ROLES = ('ALL') MUST_CHANGE_PASSWORD = TRUE;
+
+
+create OR replace table UK_ACCIDENT  
+(ID number, 
+Accident_Index varchar,
+Location_Easting_OSGR number,
+Location_Northing_OSGR number,
+Longitude number,
+Latitude number,
+Police_Force number,
+Accident_Severity number,
+Number_of_Vehicles number,
+Number_of_Casualties number,
+Date_of_accident varchar,
+Day_Of_Week varchar,
+Time varchar,
+Local_Authority_District varchar,
+Local_Authority_Highway varchar,
+"1st_Road_Class" number,
+"1st_Road_Number" number,
+Road_Type varchar,
+Speed_limit number,
+Junction_Control varchar,
+"2nd_Road_Class" number,
+"2nd_Road_Number" number,
+Pedestrian_Crossing_Human_Control varchar,
+Pedestrian_Crossing_Physical_Facilities varchar,
+Light_Conditions varchar,
+Weather_Conditions varchar,
+Road_Surface_Conditions varchar,
+Special_Conditions_at_Site varchar,
+Carriageway_Hazards varchar,
+Urban_or_Rural_Area number,
+Did_Police_Officer_Attend_Scene_of_Accident varchar,
+LSOA_of_Accident_Location varchar,
+Year number) ;
+
+
+-- LOADING CSV FILE INTO TABLE IN SNOWFLAKE 
+
+
+COPY INTO UK_Road_Safety.raw.UK_ACCIDENT
+FROM @UK_Road_Safety.raw.stg_raw
+
+FILEs = ('UK_Accident.csv')
+
+FILE_FORMAT = (TYPE = 'CSV'
+SKIP_HEADER = 1
+FIELD_OPTIONALLY_ENCLOSED_BY = '"');
+
+/* Data Loading with transformation */
+ 
+
+
+select count (*) from UK_ACCIDENT;
+
+
+
+
+
+-- Data Cleaning and Transforming
+
+
+CREATE OR REPLACE PROCEDURE UK_Road_Safety.raw.SP_TRANSFORMING()
+RETURNS VARCHAR
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+
+$$
+BEGIN
+/* Deleting Few Rows which have NULLs For Specified Columns */
+
+DELETE FROM raw.UK_ACCIDENT
+WHERE Location_Easting_OSGR IS NULL OR Longitude IS NULL OR Time IS NULL 
+OR Pedestrian_Crossing_Physical_Facilities IS NULL;
+
+/* Deleting Rows from table where "1st_Road_Number" column contains less than 0 values*/
+
+DELETE FROM raw.UK_ACCIDENT
+where "1st_Road_Number"<0;
+
+    /* Updating 'Unknown' or NULL values to the most frequent value in 'Road_Type' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Road_Type = (
+
+	SELECT TOP 1 Road_Type FROM raw.UK_ACCIDENT
+	GROUP BY Road_Type 
+	ORDER BY COUNT(*) DESC
+
+)
+
+WHERE Road_Type = 'Unknown' OR Road_Type is NULL;
+
+
+/* Updating 'Unknown' or NULL values to the most frequent value in 'Weather_Conditions' column*/
+
+
+UPDATE raw.UK_ACCIDENT
+SET Weather_Conditions = (
+
+	SELECT TOP 1 WEATHER_CONDITIONS FROM raw.UK_ACCIDENT 
+	GROUP BY Weather_Conditions 
+	ORDER BY COUNT(*) DESC 
+
+)
+
+WHERE Weather_Conditions = 'Unknown' OR Weather_Conditions is NULL;
+
+/* Updating 3(Unknown) to the most frequent value 1(Urban) in 'Urban_or_Rural_Area' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Urban_or_Rural_Area = 1
+WHERE Urban_or_Rural_Area = 3 ;
+
+/* Updating NULL values to the most frequent value in 'Pedestrian_Crossing_Physical_Facilities' column*/
+
+UPDATE raw.UK_ACCIDENT
+SET Pedestrian_Crossing_Physical_Facilities = (
+
+	SELECT TOP 1 Pedestrian_Crossing_Physical_Facilities 
+	FROM raw.UK_ACCIDENT
+	GROUP BY Pedestrian_Crossing_Physical_Facilities
+	ORDER BY COUNT(*) DESC
+
+)
+WHERE Pedestrian_Crossing_Physical_Facilities IS NULL;
+
+    RETURN 'SUCCESSFUL';
+
+
+END
+$$;
+
+CALL UK_Road_Safety.raw.SP_TRANSFORMING();
+
+
+
+
+
+/****** MOVING DATA FROM STG TO DWH Object:  StoredProcedure SP.SELECTING_ONLY_UNIQUE_DATA    Script Date: 25-08-2023 22.01.35 PM ******/
+
+CREATE OR REPLACE PROCEDURE 
+UK_Road_Safety.raw.SP.MOVING_DATA_FROM_STG_TO_DWH
+LANGUAGE SQL
+EXECUTE AS OWNER
+AS
+(
+@LOAD_ID INT
+)
+AS
+
+BEGIN
+
+
+/* Inserting Only New Data From Staging table to Main Warehouse table*/
+
+INSERT INTO DWH.UK_ACCIDENT_DWH 
+(Accident_index,
+Longitude,
+Latitude,
+Accident_Severity,
+Number_of_Vehicles,
+Number_of_Casualties,
+Date,
+Day_of_Week,
+Time,
+Local_Authority_District,
+Local_Authority_Highway,
+Road_Type,
+Speed_limit,
+Junction_Control,
+Pedestrian_Crossing_Physical_Facilities,
+Light_Conditions,
+Weather_Conditions,
+Road_Surface_Conditions,
+Urban_or_Rural_Area,
+Did_Police_Officer_Attend_Scene_of_Accident,
+Year);
+
+	  
+SELECT 
+	
+(raw.UK_ACCIDENT.Accident_Index,
+raw.UK_ACCIDENT.Longitude,
+raw.UK_ACCIDENT.Latitude,
+raw.UK_ACCIDENT.Accident_Severity,
+raw.UK_ACCIDENT.Number_of_Vehicles,
+raw.UK_ACCIDENT.Number_of_Casualties,
+raw.UK_ACCIDENT.Date,
+raw.UK_ACCIDENT.Day_of_Week,
+raw.UK_ACCIDENT.Time,
+raw.UK_ACCIDENT.Local_Authority_District,
+raw.UK_ACCIDENT.Local_Authority_Highway,
+raw.UK_ACCIDENT.Road_Type,
+raw.UK_ACCIDENT.Speed_limit,
+raw.UK_ACCIDENT.Junction_Control,
+raw.UK_ACCIDENT.Pedestrian_Crossing_Physical_Facilities,
+raw.UK_ACCIDENT.Light_Conditions,
+raw.UK_ACCIDENT.Weather_Conditions,
+raw.UK_ACCIDENT.Road_Surface_Conditions,
+raw.UK_ACCIDENT.Urban_or_Rural_Area,
+raw.UK_ACCIDENT.Did_Police_Officer_Attend_Scene_of_Accident,
+raw.UK_ACCIDENT.Year);
+	  
+/* Applying Left Outer Join on Hash_Key of Both Tables For Filtering Only New Data Out of All data*/
+FROM raw.UK_ACCIDENT 
+LEFT OUTER JOIN DWH.UK_ACCIDENT_DWH ON 
+raw.UK_ACCIDENT.Hash_Key=DWH.UK_ACCIDENT_DWH.Hash_Key 
+WHERE
+UK_ACCIDENT_DWH.Hash_Key is null
+
+END
+
+BEGIN
+
+update STG.LOAD_CONFIG
+set LOAD_STATUS = 'Y',
+INSERT_DT = getdate()
+where LOAD_ID=@LOAD_ID
+
+END
+
+/* Truncating Staging Table After Loading New Data to Main Warehouse Table*/
+BEGIN
+
+TRUNCATE TABLE raw.UK_ACCIDENT
+
+END
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,87 @@
+/****** MOVING DATA FROM STG TO DWH Object:  StoredProcedure SP.SELECTING_ONLY_UNIQUE_DATA    Script Date: 25-08-2022 4.01.35 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE SP.MOVING_DATA_FROM_STG_TO_DWH
+(
+@LOAD_ID INT
+)
+AS
+
+BEGIN
+
+/* Inserting Only New Data From Staging table to Main Warehouse table*/
+
+INSERT INTO DWH.UK_ACCIDENT_DWH 
+(Accident_index,
+       Longitude,
+       Latitude,
+       Accident_Severity,
+       Number_of_Vehicles,
+       Number_of_Casualties,
+       Date,
+       Day_of_Week,
+       Time,
+       Local_Authority_District,
+       Local_Authority_Highway,
+       Road_Type,
+       Speed_limit,
+       Junction_Control,
+       Pedestrian_Crossing_Physical_Facilities,
+       Light_Conditions,
+       Weather_Conditions,
+       Road_Surface_Conditions,
+       Urban_or_Rural_Area,
+       Did_Police_Officer_Attend_Scene_of_Accident,
+       Year)
+
+	  
+SELECT 
+	
+       raw.UK_ACCIDENT.Accident_Index,
+       raw.UK_ACCIDENT.Longitude,
+       raw.UK_ACCIDENT.Latitude,
+       raw.UK_ACCIDENT.Accident_Severity,
+       raw.UK_ACCIDENT.Number_of_Vehicles,
+       raw.UK_ACCIDENT.Number_of_Casualties,
+       raw.UK_ACCIDENT.Date,
+       raw.UK_ACCIDENT.Day_of_Week,
+       raw.UK_ACCIDENT.Time,
+       raw.UK_ACCIDENT.Local_Authority_District,
+       raw.UK_ACCIDENT.Local_Authority_Highway,
+       raw.UK_ACCIDENT.Road_Type,
+       raw.UK_ACCIDENT.Speed_limit,
+       raw.UK_ACCIDENT.Junction_Control,
+       raw.UK_ACCIDENT.Pedestrian_Crossing_Physical_Facilities,
+       raw.UK_ACCIDENT.Light_Conditions,
+       raw.UK_ACCIDENT.Weather_Conditions,
+       raw.UK_ACCIDENT.Road_Surface_Conditions,
+       raw.UK_ACCIDENT.Urban_or_Rural_Area,
+       raw.UK_ACCIDENT.Did_Police_Officer_Attend_Scene_of_Accident,
+       raw.UK_ACCIDENT.Year
+	  
+/* Applying Left Outer Join on Hash_Key of Both Tables For Filtering Only New Data Out of All data*/
+	FROM raw.UK_ACCIDENT 
+	LEFT OUTER JOIN DWH.UK_ACCIDENT_DWH ON 
+	raw.UK_ACCIDENT.Hash_Key=DWH.UK_ACCIDENT_DWH.Hash_Key 
+	WHERE
+	UK_ACCIDENT_DWH.Hash_Key is null
+
+END
+
+BEGIN
+
+update STG.LOAD_CONFIG
+set LOAD_STATUS = 'Y',
+INSERT_DT = getdate()
+where LOAD_ID=@LOAD_ID
+
+END
+
+/* Truncating Staging Table After Loading New Data to Main Warehouse Table*/
+BEGIN
+
+TRUNCATE TABLE raw.UK_ACCIDENT
+
+END
